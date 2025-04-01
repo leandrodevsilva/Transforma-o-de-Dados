@@ -1,0 +1,139 @@
+import pandas as pd
+import tabula
+import zipfile
+import os
+from pathlib import Path
+
+def identificar_tabela_rol(lista_tabelas):
+    """
+    Identifica qual das tabelas extraídas é a 'Rol de Procedimentos e Eventos em Saúde'
+    com base em padrões de cabeçalho e estrutura.
+    """
+    palavras_chave = ["procedimento", "código", "od", "amb", "descrição"]
+    
+    for idx, tabela in enumerate(lista_tabelas):
+        # Converte todos os cabeçalhos para string e para minúsculas
+        cabecalhos = " ".join(str(col).lower() for col in tabela.columns)
+        
+        # Verifica se contém pelo menos 3 palavras-chave
+        correspondencias = sum(palavra in cabecalhos for palavra in palavras_chave)
+        if correspondencias >= 3:
+            return idx, tabela
+    
+    return None, None
+
+def processar_tabela(df):
+    """
+    Processa a tabela identificada, padronizando colunas e valores.
+    """
+    # Padroniza nomes de colunas (remove acentos, espaços, etc.)
+    df.columns = [str(col).strip().lower() 
+                  .replace('ç', 'c').replace('ã', 'a').replace('õ', 'o')
+                  .replace('é', 'e').replace('ê', 'e')
+                  .replace(' ', '_').replace('ó', 'o')
+                  for col in df.columns]
+    
+    # Mapeamento completo das abreviações
+    mapeamento_od = {
+        "s": "Sim", "sim": "Sim", "s/": "Sim",
+        "n": "Não", "nao": "Não", "não": "Não", "n/": "Não",
+        "x": "Não Aplicável", "na": "Não Aplicável",
+        "": "Não Especificado", None: "Não Especificado"
+    }
+    
+    mapeamento_amb = {
+        "h": "Hospitalar", "hospitalar": "Hospitalar",
+        "s": "Serviço Profissional", "amb": "Ambulatorial",
+        "a": "Ambulatorial", "serviço": "Serviço Profissional",
+        "": "Não Especificado", None: "Não Especificado"
+    }
+    
+    # Aplica os mapeamentos se as colunas existirem
+    if 'od' in df.columns:
+        df['od'] = df['od'].astype(str).str.strip().str.lower().map(mapeamento_od).fillna('Não Especificado')
+    
+    if 'amb' in df.columns:
+        df['amb'] = df['amb'].astype(str).str.strip().str.lower().map(mapeamento_amb).fillna('Não Especificado')
+    
+    return df
+
+def extrair_e_transformar_dados():
+    
+    # Configuração do path do PDF (O caminho aqui usado é fictício, deve ser alterado de acordo com o usuário)
+        
+    if not Path(pdf_path).exists():
+        print(f"Erro: Arquivo PDF não encontrado em: {pdf_path}")
+        print("Por favor, baixe o PDF e atualize o caminho no código.")
+        return False
+    
+    try:
+        print(f"\nIniciando processamento do arquivo: {pdf_path}")
+        
+        # Extrair todas as tabelas do PDF
+        print("Extraindo tabelas do PDF...")
+        tabelas = tabula.read_pdf(
+            pdf_path,
+            pages="all",
+            multiple_tables=True,
+            lattice=True,
+            pandas_options={'header': None},
+            encoding='latin1'
+        )
+        
+        if not tabelas:
+            print("Nenhuma tabela encontrada no PDF.")
+            return False
+        
+        print(f"Encontradas {len(tabelas)} tabelas no documento.")
+        
+        # Identificar a tabela correta
+        idx_tabela, tabela_rol = identificar_tabela_rol(tabelas)
+        
+        if tabela_rol is None:
+            print("Não foi possível identificar a tabela 'Rol de Procedimentos e Eventos em Saúde'.")
+            print("Visualizando as primeiras linhas de cada tabela encontrada:")
+            for i, tbl in enumerate(tabelas):
+                print(f"\nTabela {i+1} - Shape: {tbl.shape}")
+                print(tbl.head(2))
+            return False
+        
+        print(f"\nTabela 'Rol de Procedimentos' identificada (Tabela {idx_tabela+1})")
+        
+        # Processar a tabela identificada
+        df_final = processar_tabela(tabela_rol)
+        
+        # Verificar se temos dados válidos
+        if df_final.empty or len(df_final.columns) < 3:
+            print("A tabela identificada não contém dados válidos.")
+            return False
+        
+        # Salvar como CSV
+        csv_path = "Rol_de_Procedimentos_e_Eventos_em_Saude.csv"
+        df_final.to_csv(csv_path, index=False, encoding='utf-8-sig', sep=';')
+        print(f"\nArquivo CSV gerado com sucesso: {csv_path}")
+        print(f"Total de registros: {len(df_final)}")
+        
+        # Compactar o arquivo
+        zip_path = "Teste_{Leandro_Silva}.zip"
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            zipf.write(csv_path, os.path.basename(csv_path))
+        
+        print(f"Arquivo compactado criado: {zip_path}")
+        
+        # Remover CSV temporário
+        os.remove(csv_path)
+        
+        return True
+        
+    except Exception as e:
+        print(f"\nErro durante o processamento:")
+        print(f"Tipo: {type(e).__name__}")
+        print(f"Detalhes: {str(e)}")
+        return False
+
+if __name__ == "__main__":
+    print("=== Processamento do Rol de Procedimentos e Eventos em Saúde ===")
+    if extrair_e_transformar_dados():
+        print("\nProcesso concluído com sucesso!")
+    else:
+        print("\nProcesso não foi concluído devido a erros.")
