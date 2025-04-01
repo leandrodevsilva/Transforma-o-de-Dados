@@ -2,11 +2,11 @@
 
 Script Python para extrair, processar e exportar a tabela "Rol de Procedimentos e Eventos em Saúde" de um arquivo PDF para CSV compactado.
 
-## 📋 Requisitos
+## Requisitos
 - Python 3.7+
 - Bibliotecas: `pandas`, `tabula-py`, `zipfile`, `os`, `pathlib`
 
-## 🛠 Instalação
+## Instalação
 ```bash
 pip install pandas tabula-py
 ```
